@@ -1,0 +1,41 @@
+#!/bin/bash
+#
+# post-receive hook for physionet-config
+#
+# When the default branch is pushed, check out its contents into the
+# directory /physionet/physionet-build/config
+
+branch=$(git rev-parse --symbolic-full-name HEAD | sed s,^refs/heads/,,)
+install_dir=/physionet/physionet-build/config
+log_file=/data/log/pn/update-config.log
+
+while read -r old new refname; do
+    if [ "$refname" = "refs/heads/$branch" ]; then
+        oldrev=$old
+        newrev=$new
+    fi
+done
+if [ -z "$oldrev" ] || [ -z "$newrev" ]; then
+    exit
+fi
+
+################################################################
+
+echo ============================================================ >> $log_file
+echo "$(date '+%F %T %z'): $branch: post-receive started" >> $log_file
+echo "Updating $branch (see $log_file for details):"
+exec 3>&1
+exec &> >(tee -a $log_file)
+
+# Display summary of commits added/removed
+echo "old: $oldrev" >> $log_file
+git log "$oldrev...$newrev" --reverse --topo-order \
+    --pretty=format:' %m %h %an: %s'; echo
+echo "new: $newrev" >> $log_file
+echo
+
+# Unpack files
+GIT_WORK_TREE=$install_dir git checkout --force "$branch" 2>> $log_file
+
+echo "$(date '+%F %T %z'): $branch: post-receive finished" >> $log_file
+echo >> $log_file
